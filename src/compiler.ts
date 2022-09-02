@@ -3978,6 +3978,53 @@ export class Compiler extends DiagnosticEmitter {
         if (classReference) {
           let overload = classReference.lookupOverload(OperatorKind.EQ);
           if (overload) {
+            // Blatantly copied from compileBinaryOverload()
+            const signature = overload.signature;
+            const isInstance = overload.is(CommonFlags.INSTANCE);
+            const rightType: Type = isInstance
+              ? signature.parameterTypes[0]
+              : signature.parameterTypes[1];
+
+            const rightExprRaw = this.compileExpression(right, rightType);
+            if (leftType.isNullableReference && this.currentType.isNullableReference) {
+              // Blatantly copied from compileBinaryOverload()
+              leftExpr = this.convertExpression(
+                leftExpr,
+                leftType.nonNullableType,
+                isInstance ? assert(signature.thisType) : signature.parameterTypes[0],
+                false,
+                left
+              );
+
+              // Blatantly copied from compileExpression()
+              const rightExpr = this.convertExpression(
+                rightExprRaw,
+                this.currentType.nonNullableType,
+                rightType,
+                false,
+                right
+              );
+
+              const overloadExpr = this.makeCallDirect(overload, [leftExpr, rightExpr], expression);
+
+              // If left and right are the same, return true.
+              // Else, if either (actually exactly one) of them are null, return false.
+              // Else, return the result of the overload.
+              expr = module.if(
+                module.binary(BinaryOp.EqSize, leftExpr, rightExpr),
+                module.usize(1),
+                module.if(
+                  module.binary(
+                    BinaryOp.OrSize,
+                    module.unary(UnaryOp.EqzSize, leftExpr),
+                    module.unary(UnaryOp.EqzSize, rightExpr)
+                  ),
+                  module.usize(0),
+                  overloadExpr
+                )
+              );
+              break;
+            }
             expr = this.compileBinaryOverload(overload, left, leftExpr, leftType, right, expression);
             break;
           }

@@ -38,50 +38,52 @@ export const enum CommonFlags {
   Set = 1 << 12,
   /** Has a `override` modifier.  */
   Override = 1 << 13,
+  /** Has an `async` modifier. */
+  Async = 1 << 14,
 
   /** Has a definite assignment assertion `!` as in `x!: i32;`. */
-  DefinitelyAssigned = 1 << 14,
+  DefinitelyAssigned = 1 << 15,
 
   // Extended modifiers usually derived from basic modifiers
 
   /** Is ambient, that is either declared or nested in a declared element. */
-  Ambient = 1 << 15,
+  Ambient = 1 << 16,
   /** Is generic. */
-  Generic = 1 << 16,
+  Generic = 1 << 17,
   /** Is part of a generic context. */
-  GenericContext = 1 << 17,
+  GenericContext = 1 << 18,
   /** Is an instance member. */
-  Instance = 1 << 18,
+  Instance = 1 << 19,
   /** Is a constructor. */
-  Constructor = 1 << 19,
+  Constructor = 1 << 20,
   /** Is a module export. */
-  ModuleExport = 1 << 20,
+  ModuleExport = 1 << 21,
   /** Is a module import. */
-  ModuleImport = 1 << 21,
+  ModuleImport = 1 << 22,
 
   // Compilation states
 
   /** Is resolved. */
-  Resolved = 1 << 22,
+  Resolved = 1 << 23,
   /** Is compiled. */
-  Compiled = 1 << 23,
+  Compiled = 1 << 24,
   /** Did error. */
-  Errored = 1 << 24,
+  Errored = 1 << 25,
   /** Has a constant value and is therefore inlined. */
-  Inlined = 1 << 25,
+  Inlined = 1 << 26,
   /** Is scoped. */
-  Scoped = 1 << 26,
+  Scoped = 1 << 27,
   /** Is a stub. */
-  Stub = 1 << 27,
+  Stub = 1 << 28,
   /** Is a virtual method. */
-  Virtual = 1 << 28,
+  Virtual = 1 << 29,
   /** Is (part of) a closure. */
-  Closure = 1 << 29,
+  Closure = 1 << 30,
 
   // Other
 
   /** Is quoted. */
-  Quoted = 1 << 30
+  Quoted = 1 << 31
 }
 
 /** Path delimiter inserted between file system levels. */

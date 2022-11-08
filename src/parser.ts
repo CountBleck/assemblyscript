@@ -279,6 +279,22 @@ export class Parser extends DiagnosticEmitter {
         decorators = null;
         break;
       }
+      case Token.Async: {
+        const keywordStart = tn.tokenPos;
+        const keywordEnd = tn.pos;
+        tn.next();
+        if (!tn.skip(Token.Function)) {
+          this.error(
+            DiagnosticCode._0_modifier_cannot_be_used_here,
+            tn.range(keywordStart, keywordEnd),
+            "async"
+          );
+          // Trying to parse the next tokens as a function would be problematic
+          return null;
+        }
+        flags |= CommonFlags.Async;
+        // fallthrough
+      }
       case Token.Function: {
         tn.next();
         statement = this.parseFunction(tn, flags, decorators, startPos);
@@ -1992,6 +2008,20 @@ export class Parser extends DiagnosticEmitter {
       if (parent.flags & CommonFlags.Generic) flags |= CommonFlags.GenericContext;
     }
 
+    let asyncStart = 0;
+    let asyncEnd = 0;
+    if (tn.skip(Token.Async)) {
+      if (flags & CommonFlags.Abstract) {
+        this.error(
+          DiagnosticCode._0_keyword_cannot_be_used_here,
+          tn.range(asyncStart, asyncEnd), "async"
+        ); // recoverable
+      }
+      flags |= CommonFlags.Async;
+      asyncStart = tn.tokenPos;
+      asyncEnd = tn.pos;
+    }
+
     let overrideStart = 0;
     let overrideEnd = 0;
     if (tn.skip(Token.Override)) {
@@ -2047,6 +2077,12 @@ export class Parser extends DiagnosticEmitter {
               tn.range(readonlyStart, readonlyEnd), "readonly"
             ); // recoverable
           }
+          if (flags & CommonFlags.Async) {
+            this.error(
+              DiagnosticCode._0_modifier_cannot_be_used_here,
+              tn.range(asyncStart, asyncEnd), "async"
+            ); // recoverable
+          }
         } else {
           tn.reset(state);
         }
@@ -2061,6 +2097,12 @@ export class Parser extends DiagnosticEmitter {
             this.error(
               DiagnosticCode._0_modifier_cannot_be_used_here,
               tn.range(readonlyStart, readonlyEnd), "readonly"
+            ); // recoverable
+          }
+          if (flags & CommonFlags.Async) {
+            this.error(
+              DiagnosticCode._0_modifier_cannot_be_used_here,
+              tn.range(asyncStart, asyncEnd), "async"
             ); // recoverable
           }
         } else {
@@ -2086,6 +2128,12 @@ export class Parser extends DiagnosticEmitter {
           this.error(
             DiagnosticCode._0_modifier_cannot_be_used_here,
             tn.range(readonlyStart, readonlyEnd), "readonly"
+          ); // recoverable
+        }
+        if (flags & CommonFlags.Async) {
+          this.error(
+            DiagnosticCode._0_modifier_cannot_be_used_here,
+            tn.range(asyncStart, asyncEnd), "async"
           ); // recoverable
         }
       }
@@ -2131,6 +2179,12 @@ export class Parser extends DiagnosticEmitter {
           this.error(
             DiagnosticCode._0_modifier_cannot_be_used_here,
             tn.range(abstractStart, abstractEnd), "abstract"
+          ); // recoverable
+        }
+        if (flags & CommonFlags.Async) {
+          this.error(
+            DiagnosticCode._0_modifier_cannot_be_used_here,
+            tn.range(asyncStart, asyncEnd), "async"
           ); // recoverable
         }
         let retIndex = this.parseIndexSignature(tn, flags, decorators);

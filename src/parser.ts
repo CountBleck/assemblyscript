@@ -3680,6 +3680,7 @@ export class Parser extends DiagnosticEmitter {
       case Token.Yield: // fallthrough to unsupported UnaryPrefixExpression
 
       // UnaryPrefixExpression
+      case Token.Await:
       case Token.Exclamation:
       case Token.Tilde:
       case Token.Plus:

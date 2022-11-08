@@ -391,6 +391,7 @@ export function isIllegalVariableIdentifier(name: string): bool {
 
 export function operatorTokenToString(token: Token): string {
   switch (token) {
+    case Token.Await: return "await";
     case Token.Delete: return "delete";
     case Token.In: return "in";
     case Token.InstanceOf: return "instanceof";

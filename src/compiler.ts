@@ -9585,6 +9585,12 @@ export class Compiler extends DiagnosticEmitter {
         );
         return module.unreachable();
       }
+      case Token.Await: {
+        this.error(
+          DiagnosticCode.Not_implemented_0,
+          expression.range, "Await operator"
+        );
+      }
       default: {
         assert(false);
         return module.unreachable();

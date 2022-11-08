@@ -1882,6 +1882,14 @@ export class Resolver extends DiagnosticEmitter {
         }
         return null;
       }
+      case Token.Await: {
+        if (reportMode == ReportMode.Report) {
+          this.error(
+            DiagnosticCode.Not_implemented_0,
+            node.range, "Await operator"
+          );
+        }
+      }
       case Token.TypeOf: {
         return this.program.stringInstance.type;
       }

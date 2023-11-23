@@ -5878,22 +5878,19 @@ export class Compiler extends DiagnosticEmitter {
           return module.unreachable();
         }
         let elementExpr = this.compileExpression(assert(indexExpression), setterIndexType, Constraints.ConvImplicit);
-        let elementType = this.currentType;
         if (tee) {
-          let tempTarget = flow.getTempLocal(thisType);
-          let tempElement = flow.getTempLocal(elementType);
-          let returnType = getterInstance.signature.returnType;
+          let tempLocal = flow.getTempLocal(valueType);
+          let valueTypeRef = valueType.toRef();
           let ret = module.block(null, [
             this.makeCallDirect(setterInstance, [
-              module.local_tee(tempTarget.index, thisExpr, thisType.isManaged),
-              module.local_tee(tempElement.index, elementExpr, elementType.isManaged),
-              valueExpr
+              thisExpr,
+              elementExpr,
+              module.local_tee(tempLocal.index, valueExpr, valueType.isManaged, valueTypeRef)
             ], valueExpression),
-            this.makeCallDirect(getterInstance, [
-              module.local_get(tempTarget.index, tempTarget.type.toRef()),
-              module.local_get(tempElement.index, tempElement.type.toRef())
-            ], valueExpression)
-          ], returnType.toRef());
+            module.local_get(tempLocal.index, valueTypeRef)
+          ], valueTypeRef);
+
+          this.currentType = valueType;
           return ret;
         } else {
           return this.makeCallDirect(setterInstance, [

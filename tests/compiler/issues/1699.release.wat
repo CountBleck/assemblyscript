@@ -1751,12 +1751,11 @@
    i32.store offset=4
    local.get $1
    local.get $2
-   i32.store offset=20
-   local.get $1
-   local.get $2
    i32.store offset=12
+   local.get $1
    call $issues/1699/MultiAssignmentTest#constructor
-   local.set $1
+   local.tee $1
+   i32.store offset=20
    global.get $~lib/memory/__stack_pointer
    local.get $1
    i32.store offset=16
@@ -1764,13 +1763,6 @@
    i32.const 1
    local.get $1
    call $~lib/array/Array<issues/1699/MultiAssignmentTest>#__set
-   global.get $~lib/memory/__stack_pointer
-   local.get $2
-   i32.store offset=12
-   local.get $2
-   i32.const 1
-   call $~lib/array/Array<issues/1699/MultiAssignmentTest>#__get
-   local.set $1
    global.get $~lib/memory/__stack_pointer
    local.get $1
    i32.store offset=8

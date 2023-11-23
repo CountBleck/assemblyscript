@@ -2898,6 +2898,31 @@
   i32.add
   global.set $~lib/memory/__stack_pointer
  )
+ (func $~lib/array/Array<issues/1699/MultiAssignmentTest>#get:length (param $this i32) (result i32)
+  (local $1 i32)
+  global.get $~lib/memory/__stack_pointer
+  i32.const 4
+  i32.sub
+  global.set $~lib/memory/__stack_pointer
+  call $~stack_check
+  global.get $~lib/memory/__stack_pointer
+  i32.const 0
+  i32.store
+  local.get $this
+  local.set $1
+  global.get $~lib/memory/__stack_pointer
+  local.get $1
+  i32.store
+  local.get $1
+  call $~lib/array/Array<issues/1699/MultiAssignmentTest>#get:length_
+  local.set $1
+  global.get $~lib/memory/__stack_pointer
+  i32.const 4
+  i32.add
+  global.set $~lib/memory/__stack_pointer
+  local.get $1
+  return
+ )
  (func $~lib/array/Array<issues/1699/MultiAssignmentTest>#__get (param $this i32) (param $index i32) (result i32)
   (local $value i32)
   (local $3 i32)
@@ -2965,38 +2990,12 @@
   local.get $3
   return
  )
- (func $~lib/array/Array<issues/1699/MultiAssignmentTest>#get:length (param $this i32) (result i32)
-  (local $1 i32)
-  global.get $~lib/memory/__stack_pointer
-  i32.const 4
-  i32.sub
-  global.set $~lib/memory/__stack_pointer
-  call $~stack_check
-  global.get $~lib/memory/__stack_pointer
-  i32.const 0
-  i32.store
-  local.get $this
-  local.set $1
-  global.get $~lib/memory/__stack_pointer
-  local.get $1
-  i32.store
-  local.get $1
-  call $~lib/array/Array<issues/1699/MultiAssignmentTest>#get:length_
-  local.set $1
-  global.get $~lib/memory/__stack_pointer
-  i32.const 4
-  i32.add
-  global.set $~lib/memory/__stack_pointer
-  local.get $1
-  return
- )
  (func $issues/1699/test
   (local $testinstances i32)
   (local $1 i32)
-  (local $2 i32)
   (local $n i32)
   (local $testinstance i32)
-  (local $5 i32)
+  (local $4 i32)
   global.get $~lib/memory/__stack_pointer
   i32.const 28
   i32.sub
@@ -3013,56 +3012,48 @@
   local.tee $testinstances
   i32.store
   local.get $testinstances
-  local.set $5
+  local.set $4
   global.get $~lib/memory/__stack_pointer
-  local.get $5
+  local.get $4
   i32.store offset=4
-  local.get $5
+  local.get $4
   i32.const 0
-  global.get $~lib/memory/__stack_pointer
   local.get $testinstances
+  local.set $4
+  global.get $~lib/memory/__stack_pointer
+  local.get $4
+  i32.store offset=12
+  local.get $4
+  i32.const 1
+  global.get $~lib/memory/__stack_pointer
+  i32.const 0
+  call $issues/1699/MultiAssignmentTest#constructor
   local.tee $1
   i32.store offset=20
   local.get $1
-  local.set $5
+  local.set $4
   global.get $~lib/memory/__stack_pointer
-  local.get $5
-  i32.store offset=12
-  local.get $5
-  i32.const 1
-  local.tee $2
-  i32.const 0
-  call $issues/1699/MultiAssignmentTest#constructor
-  local.set $5
-  global.get $~lib/memory/__stack_pointer
-  local.get $5
+  local.get $4
   i32.store offset=16
-  local.get $5
+  local.get $4
   call $~lib/array/Array<issues/1699/MultiAssignmentTest>#__set
   local.get $1
-  local.set $5
+  local.set $4
   global.get $~lib/memory/__stack_pointer
-  local.get $5
-  i32.store offset=12
-  local.get $5
-  local.get $2
-  call $~lib/array/Array<issues/1699/MultiAssignmentTest>#__get
-  local.set $5
-  global.get $~lib/memory/__stack_pointer
-  local.get $5
+  local.get $4
   i32.store offset=8
-  local.get $5
+  local.get $4
   call $~lib/array/Array<issues/1699/MultiAssignmentTest>#__set
   i32.const 0
   local.set $n
   loop $for-loop|0
    local.get $n
    local.get $testinstances
-   local.set $5
+   local.set $4
    global.get $~lib/memory/__stack_pointer
-   local.get $5
+   local.get $4
    i32.store offset=4
-   local.get $5
+   local.get $4
    call $~lib/array/Array<issues/1699/MultiAssignmentTest>#get:length
    i32.lt_s
    if
@@ -3076,18 +3067,18 @@
     i32.gt_s
     if
      local.get $testinstances
-     local.set $5
+     local.set $4
      global.get $~lib/memory/__stack_pointer
-     local.get $5
+     local.get $4
      i32.store offset=4
-     local.get $5
+     local.get $4
      local.get $n
      local.get $testinstance
-     local.set $5
+     local.set $4
      global.get $~lib/memory/__stack_pointer
-     local.get $5
+     local.get $4
      i32.store offset=8
-     local.get $5
+     local.get $4
      call $~lib/array/Array<issues/1699/MultiAssignmentTest>#__set
     end
     local.get $n
@@ -3098,19 +3089,19 @@
    end
   end
   local.get $testinstances
-  local.set $5
+  local.set $4
   global.get $~lib/memory/__stack_pointer
-  local.get $5
+  local.get $4
   i32.store offset=4
-  local.get $5
+  local.get $4
   i32.const 0
   call $~lib/array/Array<issues/1699/MultiAssignmentTest>#__get
   local.get $testinstances
-  local.set $5
+  local.set $4
   global.get $~lib/memory/__stack_pointer
-  local.get $5
+  local.get $4
   i32.store offset=4
-  local.get $5
+  local.get $4
   i32.const 1
   call $~lib/array/Array<issues/1699/MultiAssignmentTest>#__get
   i32.eq
@@ -3124,19 +3115,19 @@
    unreachable
   end
   local.get $testinstances
-  local.set $5
+  local.set $4
   global.get $~lib/memory/__stack_pointer
-  local.get $5
+  local.get $4
   i32.store offset=4
-  local.get $5
+  local.get $4
   i32.const 2
   call $~lib/array/Array<issues/1699/MultiAssignmentTest>#__get
   local.get $testinstances
-  local.set $5
+  local.set $4
   global.get $~lib/memory/__stack_pointer
-  local.get $5
+  local.get $4
   i32.store offset=4
-  local.get $5
+  local.get $4
   i32.const 1
   call $~lib/array/Array<issues/1699/MultiAssignmentTest>#__get
   i32.ne

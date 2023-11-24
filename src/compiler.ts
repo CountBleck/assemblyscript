@@ -4716,9 +4716,14 @@ export class Compiler extends DiagnosticEmitter {
       }
     }
     if (!compound) return expr;
+    let resultType = this.currentType;
     let resolver = this.resolver;
     let target = resolver.lookupExpression(left, this.currentFlow);
     if (!target) return module.unreachable();
+
+    let thisExpression = resolver.currentThisExpression;
+    let elementExpression = resolver.currentElementExpression;
+
     let targetType = resolver.getTypeOfElement(target);
     if (!targetType) targetType = Type.void;
     if (!this.currentType.isStrictlyAssignableTo(targetType)) {
@@ -4728,13 +4733,29 @@ export class Compiler extends DiagnosticEmitter {
       );
       return module.unreachable();
     }
+
+    let thisExpr = this.compileThisExpressionForAssignment(target, thisExpression);
+    let thisType = thisExpr ? this.currentType : null;
+
+    let elementExpr: ExpressionRef = 0;
+    let elementType: Type | null = null;
+
+    if (elementExpression) {
+      elementExpr = this.compileExpression(elementExpression, Type.auto);
+      elementType = this.currentType;
+    }
+
     return this.makeAssignment(
       target,
       expr,
-      this.currentType,
+      resultType,
+      thisExpr,
+      thisType,
+      elementExpr,
+      elementType,
       right,
-      resolver.currentThisExpression,
-      resolver.currentElementExpression,
+      thisExpression,
+      elementExpression,
       contextualType != Type.void
     );
   }
@@ -5704,15 +5725,50 @@ export class Compiler extends DiagnosticEmitter {
     let valueExpr = this.compileExpression(valueExpression, targetType);
     let valueType = this.currentType;
     if (targetType.isNullableReference && this.currentFlow.isNonnull(valueExpr, valueType)) targetType = targetType.nonNullableType;
+
+    let thisExpr = this.compileThisExpressionForAssignment(target, thisExpression);
+    let thisType = thisExpr ? this.currentType : null;
+
+    let elementExpr: ExpressionRef = 0;
+    let elementType: Type | null = null;
+
+    if (elementExpression) {
+      elementExpr = this.compileExpression(elementExpression, Type.auto);
+      elementType = this.currentType;
+    }
+
     return this.makeAssignment(
       target,
       this.convertExpression(valueExpr, valueType, targetType, false, valueExpression),
       targetType,
+      thisExpr,
+      thisType,
+      elementExpr,
+      elementType,
       valueExpression,
       thisExpression,
       elementExpression,
       contextualType != Type.void
     );
+  }
+
+  /**
+   * Decides whether to compile the resolved `this` expression, if any, of a
+   * property or element assignment.
+   */
+  private compileThisExpressionForAssignment(
+    target: Element,
+    thisExpression: Expression | null
+  ): ExpressionRef {
+    if (!thisExpression) return 0;
+    // NOTE: I don't remember what this is or what it's for...I'll revisit it later.
+    if (target.kind == ElementKind.IndexSignature) {
+      let isUnchecked = this.currentFlow.is(FlowFlags.UncheckedContext);
+      target = assert((<IndexSignature>target).getGetterInstance(isUnchecked));
+    }
+
+    if (!target.is(CommonFlags.Instance)) return 0;
+    return this.compileExpression(thisExpression, Type.auto, Constraints.IsThis);
   }
 
   /** Makes an assignment expression or block, assigning a value to a target. */
@@ -5723,12 +5779,20 @@ export class Compiler extends DiagnosticEmitter {
     valueExpr: ExpressionRef,
     /** Value expression type. */
     valueType: Type,
+    /** Compiled `this` expression if a field or property set. */
+    thisExpr: ExpressionRef,
+    /** Type of `this` expression. */
+    thisType: Type | null,
+    /** Compiled index expression if an indexed set. */
+    indexExpr: ExpressionRef,
+    /** Type of index expression. */
+    indexType: Type | null,
     /** Expression reference. Has already been compiled to `valueExpr`. */
-    valueExpression: Expression,
+    valueReportNode: Expression,
     /** `this` expression reference if a field or property set. */
-    thisExpression: Expression | null,
+    thisReportNode: Node | null,
     /** Index expression reference if an indexed set. */
-    indexExpression: Expression | null,
+    indexReportNode: Node | null,
     /** Whether to tee the value. */
     tee: bool
   ): ExpressionRef {
@@ -5741,7 +5805,7 @@ export class Compiler extends DiagnosticEmitter {
         if (flow.isLocalFlag(local.index, LocalFlags.Constant, true)) {
           this.error(
             DiagnosticCode.Cannot_assign_to_0_because_it_is_a_constant_or_a_read_only_property,
-            valueExpression.range, target.internalName
+            valueReportNode.range, target.internalName
           );
           this.currentType = tee ? local.type : Type.void;
           return module.unreachable();
@@ -5750,13 +5814,13 @@ export class Compiler extends DiagnosticEmitter {
       }
       case ElementKind.Global: {
         let global = <Global>target;
-        if (!this.compileGlobalLazy(global, valueExpression)) {
+        if (!this.compileGlobalLazy(global, valueReportNode)) {
           return module.unreachable();
         }
         if (target.isAny(CommonFlags.Const | CommonFlags.Readonly)) {
           this.error(
             DiagnosticCode.Cannot_assign_to_0_because_it_is_a_constant_or_a_read_only_property,
-            valueExpression.range,
+            valueReportNode.range,
             target.internalName
           );
           this.currentType = tee ? global.type : Type.void;
@@ -5780,14 +5844,14 @@ export class Compiler extends DiagnosticEmitter {
             if (!isConstructor || initializerNode) {
               this.error(
                 DiagnosticCode.Cannot_assign_to_0_because_it_is_a_constant_or_a_read_only_property,
-                valueExpression.range, propertyInstance.internalName
+                valueReportNode.range, propertyInstance.internalName
               );
               return module.unreachable();
             }
           }
           // Mark initialized fields in constructors
-          thisExpression = assert(thisExpression);
-          if (isConstructor && thisExpression.kind == NodeKind.This) {
+          thisReportNode = assert(thisReportNode);
+          if (isConstructor && thisReportNode.kind == NodeKind.This) {
             flow.setThisFieldFlag(propertyInstance, FieldFlags.Initialized);
           }
         }
@@ -5795,39 +5859,41 @@ export class Compiler extends DiagnosticEmitter {
         if (!setterInstance) {
           this.error(
             DiagnosticCode.Cannot_assign_to_0_because_it_is_a_constant_or_a_read_only_property,
-            valueExpression.range, target.internalName
+            valueReportNode.range, target.internalName
           );
           return module.unreachable();
         }
         assert(setterInstance.signature.parameterTypes.length == 1);
         assert(setterInstance.signature.returnType == Type.void);
         if (propertyInstance.is(CommonFlags.Instance)) {
-          let thisType = assert(setterInstance.signature.thisType);
-          let thisExpr = this.compileExpression(
-            assert(thisExpression),
-            thisType,
-            Constraints.ConvImplicit | Constraints.IsThis
+          let targetThisType = assert(setterInstance.signature.thisType);
+          let convertedThisExpr = this.convertExpression(
+            assert(thisExpr),
+            assert(thisType),
+            targetThisType,
+            false,
+            assert(thisReportNode)
           );
-          if (!tee) return this.makeCallDirect(setterInstance, [ thisExpr, valueExpr ], valueExpression);
+          if (!tee) return this.makeCallDirect(setterInstance, [ convertedThisExpr, valueExpr ], valueReportNode);
           let tempLocal = flow.getTempLocal(valueType);
           let valueTypeRef = valueType.toRef();
           let ret = module.block(null, [
             this.makeCallDirect(setterInstance, [
-              thisExpr,
+              convertedThisExpr,
               module.local_tee(tempLocal.index, valueExpr, valueType.isManaged, valueTypeRef)
-            ], valueExpression),
+            ], valueReportNode),
             module.local_get(tempLocal.index, valueTypeRef),
           ], valueTypeRef);
           this.currentType = valueType;
           return ret;
         } else {
-          if (!tee) return this.makeCallDirect(setterInstance, [ valueExpr ], valueExpression);
+          if (!tee) return this.makeCallDirect(setterInstance, [ valueExpr ], valueReportNode);
           let tempLocal = flow.getTempLocal(valueType);
           let valueTypeRef = valueType.toRef();
           let ret = module.block(null, [
             this.makeCallDirect(setterInstance, [
               module.local_tee(tempLocal.index, valueExpr, valueType.isManaged, valueTypeRef),
-            ], valueExpression),
+            ], valueReportNode),
             module.local_get(tempLocal.index, valueTypeRef),
           ], valueTypeRef);
           this.currentType = valueType;
@@ -5839,13 +5905,12 @@ export class Compiler extends DiagnosticEmitter {
         let parent = indexSignature.parent;
         assert(parent.kind == ElementKind.Class);
         let classInstance = <Class>parent;
-        assert(classInstance.kind == ElementKind.Class);
         let isUnchecked = flow.is(FlowFlags.UncheckedContext);
         let getterInstance = classInstance.lookupOverload(OperatorKind.IndexedGet, isUnchecked);
         if (!getterInstance) {
           this.error(
             DiagnosticCode.Index_signature_is_missing_in_type_0,
-            valueExpression.range, classInstance.internalName
+            valueReportNode.range, classInstance.internalName
           );
           return module.unreachable();
         }
@@ -5853,17 +5918,19 @@ export class Compiler extends DiagnosticEmitter {
         if (!setterInstance) {
           this.error(
             DiagnosticCode.Index_signature_in_type_0_only_permits_reading,
-            valueExpression.range, classInstance.internalName
+            valueReportNode.range, classInstance.internalName
           );
           this.currentType = tee ? getterInstance.signature.returnType : Type.void;
           return module.unreachable();
         }
         assert(setterInstance.signature.parameterTypes.length == 2);
-        let thisType = classInstance.type;
-        let thisExpr = this.compileExpression(
-          assert(thisExpression),
-          thisType,
-          Constraints.ConvImplicit | Constraints.IsThis
+        let targetThisType = classInstance.type;
+        let convertedThisExpr = this.convertExpression(
+          assert(thisExpr),
+          assert(thisType),
+          targetThisType,
+          false,
+          assert(thisReportNode)
         );
         let setterIndexType = setterInstance.signature.parameterTypes[0];
         let getterIndexType = getterInstance.signature.parameterTypes[0];
@@ -5877,16 +5944,22 @@ export class Compiler extends DiagnosticEmitter {
           this.currentType = tee ? getterInstance.signature.returnType : Type.void;
           return module.unreachable();
         }
-        let elementExpr = this.compileExpression(assert(indexExpression), setterIndexType, Constraints.ConvImplicit);
+        let elementExpr = this.convertExpression(
+          assert(indexExpr),
+          assert(indexType),
+          setterIndexType,
+          false,
+          assert(indexReportNode)
+        );
         if (tee) {
           let tempLocal = flow.getTempLocal(valueType);
           let valueTypeRef = valueType.toRef();
           let ret = module.block(null, [
             this.makeCallDirect(setterInstance, [
-              thisExpr,
+              convertedThisExpr,
               elementExpr,
               module.local_tee(tempLocal.index, valueExpr, valueType.isManaged, valueTypeRef)
-            ], valueExpression),
+            ], valueReportNode),
             module.local_get(tempLocal.index, valueTypeRef)
           ], valueTypeRef);
 
@@ -5894,16 +5967,16 @@ export class Compiler extends DiagnosticEmitter {
           return ret;
         } else {
           return this.makeCallDirect(setterInstance, [
-            thisExpr,
+            convertedThisExpr,
             elementExpr,
             valueExpr
-          ], valueExpression);
+          ], valueReportNode);
         }
       }
       default: {
         this.error(
           DiagnosticCode.The_target_of_an_assignment_must_be_a_variable_or_a_property_access,
-          valueExpression.range
+          valueReportNode.range
         );
       }
     }
@@ -6284,15 +6357,6 @@ export class Compiler extends DiagnosticEmitter {
       this.currentType = signature.returnType;
       return this.module.unreachable();
     }
-    if (instance.hasDecorator(DecoratorFlags.Unsafe)) this.checkUnsafe(reportNode);
-
-    // handle call on `this` in constructors
-    let sourceFunction = this.currentFlow.sourceFunction;
-    if (sourceFunction.is(CommonFlags.Constructor) && reportNode.isAccessOnThis) {
-      let parent = sourceFunction.parent;
-      assert(parent.kind == ElementKind.Class);
-      this.checkFieldInitialization(<Class>parent, reportNode);
-    }
 
     // Inline if explicitly requested
     if (instance.hasDecorator(DecoratorFlags.Inline) && (!instance.is(CommonFlags.Overridden) || reportNode.isAccessOnSuper)) {
@@ -6314,7 +6378,7 @@ export class Compiler extends DiagnosticEmitter {
         }
         // make the inlined call
         inlineStack.push(instance);
-        let expr = this.makeCallInline(instance, args, thisArg, (constraints & Constraints.WillDrop) != 0);
+        let expr = this.makeCallInline(instance, args, thisArg, reportNode, (constraints & Constraints.WillDrop) != 0);
         inlineStack.pop();
         return expr;
       }
@@ -6338,10 +6402,32 @@ export class Compiler extends DiagnosticEmitter {
     return this.makeCallDirect(instance, operands, reportNode, (constraints & Constraints.WillDrop) != 0);
   }
 
+  /**
+   * Validates some components of a call's safety. This is used within
+   * {@link makeCallDirect} and {@link makeCallInline} instead of within
+   * {@link compileCallDirect} so that these checks also take place for
+   * function calls with pre-compiled arguments.
+   */
+  private validateCall(
+    instance: Function,
+    reportNode: Node
+  ): void {
+    if (instance.hasDecorator(DecoratorFlags.Unsafe)) this.checkUnsafe(reportNode);
+
+    // handle call on `this` in constructors
+    let sourceFunction = this.currentFlow.sourceFunction;
+    if (sourceFunction.is(CommonFlags.Constructor) && reportNode.isAccessOnThis) {
+      let parent = sourceFunction.parent;
+      assert(parent.kind == ElementKind.Class);
+      this.checkFieldInitialization(<Class>parent, reportNode);
+    }
+  }
+
   makeCallInline(
     instance: Function,
     operands: ExpressionRef[] | null,
-    thisArg: ExpressionRef = 0,
+    thisArg: ExpressionRef,
+    reportNode: Node,
     immediatelyDropped: bool = false
   ): ExpressionRef {
     let module = this.module;
@@ -6349,6 +6435,8 @@ export class Compiler extends DiagnosticEmitter {
     let signature = instance.signature;
     let parameterTypes = signature.parameterTypes;
     let numParameters = parameterTypes.length;
+
+    this.validateCall(instance, reportNode);
 
     // Create a new inline flow and use it to compile the function as a block
     let previousFlow = this.currentFlow;
@@ -6757,6 +6845,8 @@ export class Compiler extends DiagnosticEmitter {
     reportNode: Node,
     immediatelyDropped: bool = false
   ): ExpressionRef {
+    this.validateCall(instance, reportNode);
+
     if (instance.hasDecorator(DecoratorFlags.Inline)) {
       if (!instance.is(CommonFlags.Overridden)) {
         assert(!instance.is(CommonFlags.Stub)); // doesn't make sense
@@ -6772,9 +6862,9 @@ export class Compiler extends DiagnosticEmitter {
           if (instance.is(CommonFlags.Instance)) {
             let theOperands = assert(operands);
             assert(theOperands.length);
-            expr = this.makeCallInline(instance, theOperands.slice(1), theOperands[0], immediatelyDropped);
+            expr = this.makeCallInline(instance, theOperands.slice(1), theOperands[0], reportNode, immediatelyDropped);
           } else {
-            expr = this.makeCallInline(instance, operands, 0, immediatelyDropped);
+            expr = this.makeCallInline(instance, operands, 0, reportNode, immediatelyDropped);
           }
           inlineStack.pop();
           return expr;
@@ -7005,33 +7095,80 @@ export class Compiler extends DiagnosticEmitter {
   ): ExpressionRef {
     let module = this.module;
     let targetExpression = expression.expression;
+    let elementExpression = expression.elementExpression;
     let targetType = this.resolver.resolveExpression(targetExpression, this.currentFlow); // reports
-    if (targetType) {
-      let classReference = targetType.getClassOrWrapper(this.program);
-      if (classReference) {
-        let isUnchecked = this.currentFlow.is(FlowFlags.UncheckedContext);
-        let indexedGet = classReference.lookupOverload(OperatorKind.IndexedGet, isUnchecked);
-        if (indexedGet) {
-          let thisType = assert(indexedGet.signature.thisType);
-          let thisArg = this.compileExpression(targetExpression, thisType,
-            Constraints.ConvImplicit
-          );
-          if (!isUnchecked && this.options.pedantic) {
-            this.pedantic(
-              DiagnosticCode.Indexed_access_may_involve_bounds_checking,
-              expression.range
-            );
-          }
-          return this.compileCallDirect(indexedGet, [
-            expression.elementExpression
-          ], expression, thisArg, constraints);
-        }
-      }
+    if (!targetType) return module.unreachable();
+
+    let classReference = targetType.getClassOrWrapper(this.program);
+    if (!classReference) {
       this.error(
         DiagnosticCode.Index_signature_is_missing_in_type_0,
         expression.expression.range, targetType.toString()
       );
+      return module.unreachable();
     }
+
+    return this.makeElementAccess(
+      this.compileExpression(targetExpression, targetType),
+      classReference,
+      this.compileExpression(expression.elementExpression, Type.auto),
+      this.currentType,
+      targetExpression,
+      elementExpression,
+      expression,
+      (constraints & Constraints.WillDrop) != 0
+    );
+  }
+
+  /** Makes an element access with precompiled operands. */
+  private makeElementAccess(
+    targetExpr: ExpressionRef,
+    targetClass: Class,
+    elementExpr: ExpressionRef,
+    elementType: Type,
+    targetReportNode: Node,
+    elementReportNode: Node,
+    reportNode: Node,
+    immediatelyDropped: bool
+  ): ExpressionRef {
+    let module = this.module;
+    let isUnchecked = this.currentFlow.is(FlowFlags.UncheckedContext);
+    let indexedGet = targetClass.lookupOverload(OperatorKind.IndexedGet, isUnchecked);
+    if (indexedGet) {
+      if (!isUnchecked && this.options.pedantic) {
+        this.pedantic(
+          DiagnosticCode.Indexed_access_may_involve_bounds_checking,
+          reportNode.range
+        );
+      }
+
+      let thisType = assert(indexedGet.signature.thisType);
+      let convertedTargetExpr = this.convertExpression(
+        targetExpr,
+        targetClass.type,
+        thisType,
+        false,
+        targetReportNode
+      );
+      let convertedElementExpr = this.convertExpression(
+        elementExpr,
+        elementType,
+        indexedGet.signature.parameterTypes[0],
+        false,
+        elementReportNode
+      );
+      return this.makeCallDirect(
+        indexedGet,
+        [convertedTargetExpr, convertedElementExpr],
+        reportNode,
+        immediatelyDropped
+      );
+    }
+
+    this.error(
+      DiagnosticCode.Index_signature_is_missing_in_type_0,
+      targetReportNode.range, targetClass.internalName
+    );
     return module.unreachable();
   }
 
@@ -9015,32 +9152,25 @@ export class Compiler extends DiagnosticEmitter {
       }
       case ElementKind.Property: {
         let propertyInstance = <Property>target;
-        if (propertyInstance.isField) {
-          if (
-            flow.sourceFunction.is(CommonFlags.Constructor) &&
-            assert(thisExpression).kind == NodeKind.This &&
-            !flow.isThisFieldFlag(propertyInstance, FieldFlags.Initialized) &&
-            !propertyInstance.is(CommonFlags.DefinitelyAssigned)
-          ) {
-            this.errorRelated(
-              DiagnosticCode.Property_0_is_used_before_being_assigned,
-              expression.range,
-              propertyInstance.identifierNode.range,
-              propertyInstance.internalName
-            );
-          }
-        }
-        let getterInstance = propertyInstance.getterInstance;
-        if (!getterInstance) return module.unreachable(); // failed earlier
-        let thisArg: ExpressionRef = 0;
-        if (getterInstance.is(CommonFlags.Instance)) {
-          thisArg = this.compileExpression(
+        let thisExpr: ExpressionRef = 0;
+        let thisType: Type | null = null;
+
+        if (thisExpression) {
+          thisExpr = this.compileExpression(
             assert(thisExpression),
-            assert(getterInstance.signature.thisType),
-            Constraints.ConvImplicit | Constraints.IsThis
+            Type.auto,
+            Constraints.IsThis
           );
+          thisType = this.currentType;
         }
-        return this.compileCallDirect(getterInstance, [], expression, thisArg);
+
+        return this.makeClassPropertyAccess(
+          propertyInstance,
+          thisExpr,
+          thisType,
+          thisExpression,
+          expression
+        );
       }
       case ElementKind.FunctionPrototype: {
         let functionPrototype = <FunctionPrototype>target;
@@ -9078,6 +9208,50 @@ export class Compiler extends DiagnosticEmitter {
       expression.range
     );
     return this.module.unreachable();
+  }
+
+  /** Makes a property access with a precompiled `this` expression. */
+  private makeClassPropertyAccess(
+    property: Property,
+    thisExpr: ExpressionRef,
+    thisType: Type | null,
+    thisReportNode: Node | null,
+    reportNode: Node,
+  ): ExpressionRef {
+    let module = this.module;
+    let flow = this.currentFlow;
+
+    if (
+      property.isField &&
+      flow.sourceFunction.is(CommonFlags.Constructor) &&
+      assert(thisReportNode).kind == NodeKind.This &&
+      !flow.isThisFieldFlag(property, FieldFlags.Initialized) &&
+      !property.is(CommonFlags.DefinitelyAssigned)
+    ) {
+      this.errorRelated(
+        DiagnosticCode.Property_0_is_used_before_being_assigned,
+        reportNode.range,
+        property.identifierNode.range,
+        property.internalName
+      );
+    }
+
+    let getterInstance = property.getterInstance;
+    if (!getterInstance) return module.unreachable(); // failed earlier
+
+    let args = getterInstance.is(CommonFlags.Instance)
+      ? [
+        this.convertExpression(
+          assert(thisExpr),
+          assert(thisType),
+          assert(getterInstance.signature.thisType),
+          false,
+          assert(thisReportNode)
+        )
+      ]
+      : [];
+
+    return this.makeCallDirect(getterInstance, args, reportNode);
   }
 
   private compileTernaryExpression(
@@ -9349,10 +9523,25 @@ export class Compiler extends DiagnosticEmitter {
       }
     }
 
+    let resultType = this.currentType;
     let resolver = this.resolver;
     let target = resolver.lookupExpression(expression.operand, flow); // reports
     if (!target) {
       return module.unreachable();
+    }
+
+    let thisExpression = resolver.currentThisExpression;
+    let elementExpression = resolver.currentElementExpression;
+
+    let thisExpr = this.compileThisExpressionForAssignment(target, thisExpression);
+    let thisType = thisExpr ? this.currentType : null;
+
+    let elementExpr: ExpressionRef = 0;
+    let elementType: Type | null = null;
+
+    if (elementExpression) {
+      elementExpr = this.compileExpression(elementExpression, Type.auto);
+      elementType = this.currentType;
     }
 
     // simplify if dropped anyway
@@ -9360,10 +9549,14 @@ export class Compiler extends DiagnosticEmitter {
       return this.makeAssignment(
         target,
         expr,
-        this.currentType,
+        resultType,
+        thisExpr,
+        thisType,
+        elementExpr,
+        elementType,
         expression.operand,
-        resolver.currentThisExpression,
-        resolver.currentElementExpression,
+        thisExpression,
+        elementExpression,
         false
       );
     }
@@ -9372,10 +9565,14 @@ export class Compiler extends DiagnosticEmitter {
     let setValue = this.makeAssignment(
       target,
       expr, // includes a tee of getValue to tempLocal
-      this.currentType,
+      resultType,
+      thisExpr,
+      thisType,
+      elementExpr,
+      elementType,
       expression.operand,
-      resolver.currentThisExpression,
-      resolver.currentElementExpression,
+      thisExpression,
+      elementExpression,
       false
     );
 
@@ -9730,16 +9927,36 @@ export class Compiler extends DiagnosticEmitter {
       }
     }
     if (!compound) return expr;
+    let resultType = this.currentType;
     let resolver = this.resolver;
     let target = resolver.lookupExpression(expression.operand, this.currentFlow);
     if (!target) return module.unreachable();
+
+    let thisExpression = resolver.currentThisExpression;
+    let elementExpression = resolver.currentElementExpression;
+
+    let thisExpr = this.compileThisExpressionForAssignment(target, thisExpression);
+    let thisType = thisExpr ? this.currentType : null;
+
+    let elementExpr: ExpressionRef = 0;
+    let elementType: Type | null = null;
+
+    if (elementExpression) {
+      elementExpr = this.compileExpression(elementExpression, Type.auto);
+      elementType = this.currentType;
+    }
+
     return this.makeAssignment(
       target,
       expr,
-      this.currentType,
+      resultType,
+      thisExpr,
+      thisType,
+      elementExpr,
+      elementType,
       expression.operand,
-      resolver.currentThisExpression,
-      resolver.currentElementExpression,
+      thisExpression,
+      elementExpression,
       contextualType != Type.void
     );
   }

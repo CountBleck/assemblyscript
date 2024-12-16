@@ -95,6 +95,7 @@ export const enum NodeKind {
   ForOf,
   If,
   Import,
+  Label,
   Return,
   Switch,
   Throw,
@@ -2177,6 +2178,20 @@ export class InterfaceDeclaration extends ClassDeclaration {
   ) {
     super(name, decorators, flags, typeParameters, extendsType, implementsTypes, members, range);
     this.kind = NodeKind.InterfaceDeclaration;
+  }
+}
+
+/** Represents a statement label. */
+export class Label extends Statement {
+  constructor(
+    /** Statement being labeled. */
+    public statement: Statement,
+    /** Label name. */
+    public name: IdentifierExpression,
+    /** Source range. */
+    range: Range
+) {
+    super(NodeKind.Label, range);
   }
 }
 

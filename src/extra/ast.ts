@@ -815,6 +815,15 @@ export class ASTBuilder {
     }
   }
 
+  private visitLabel(label: IdentifierExpression | null) {
+    if (!label) return;
+
+    let sb = this.sb;
+    this.visitIdentifierExpression(label);
+    sb.push(":\n");
+    indent(sb, this.indentLevel);
+  }
+
   visitBreakStatement(node: BreakStatement): void {
     let label = node.label;
     if (label) {

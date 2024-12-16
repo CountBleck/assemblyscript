@@ -2899,7 +2899,37 @@ export class Parser extends DiagnosticEmitter {
 
     let state = tn.mark();
     let token = tn.next();
+    let label: IdentifierExpression | null = null;
     let statement: Statement | null = null;
+
+    // Detect labeled statements
+    if (token == Token.Identifier) {
+      const preIdentifierState = tn.mark();
+      const identifier = tn.readIdentifier();
+      const range = tn.range();
+
+      if (tn.skip(Token.Colon)) {
+        label = Node.createIdentifierExpression(identifier, range);
+        token = tn.next();
+
+        switch (token) {
+          case Token.Do:
+          case Token.For:
+          case Token.If:
+          case Token.OpenBrace:
+          case Token.Switch:
+          case Token.Try:
+          case Token.While:
+            // Do nothing
+            break;
+          default:
+            this.error(DiagnosticCode.A_label_is_not_allowed_here, range);
+        }
+      } else {
+        tn.reset(preIdentifierState);
+      }
+    }
+
     switch (token) {
       case Token.Break: {
         statement = this.parseBreak(tn);

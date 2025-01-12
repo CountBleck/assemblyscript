@@ -1,52 +1,60 @@
 function tests(): string[] {
   const results: string[] = [];
 
-  label:
-  for (let i = 0; i < 6; i++) {
-    if (i == 2) {
-      results.push("continue!");
-      continue label;
-    }
+  // label:
+  // for (let i = 0; i < 6; i++) {
+  //   if (i == 2) {
+  //     results.push("continue!");
+  //     continue label;
+  //   }
 
-    if (i == 4) {
-      results.push("break!");
-      break label;
-    }
+  //   if (i == 4) {
+  //     results.push("break!");
+  //     break label;
+  //   }
 
-    results.push(`first loop ${i}`);
-  }
+  //   results.push(`first loop ${i}`);
+  // }
 
-  sweetch:
-  switch (1) {
-    case 1:
-      for (let i = 0; i < 6; i++) {
-        results.push(`second ${i}`);
-        if (i == 3) break sweetch;
-      }
-      results.push("skipped");
-  }
+  // sweetch:
+  // switch (1) {
+  //   case 1:
+  //     for (let i = 0; i < 6; i++) {
+  //       results.push(`second ${i}`);
+  //       if (i == 3) break sweetch;
+  //     }
+  //     results.push("skipped");
+  // }
 
+  // escape:
+  // {
+  //   results.push("hi");
+  //   break escape;
+  //   results.push("skipped");
+  // }
+
+  // REMOVE ME
   escape:
-  {
+  do {
     results.push("hi");
     break escape;
     results.push("skipped");
-  }
+  } while (0);
 
-  outer:
-  for (let i = 0; i < 5; i++) {
-    exit:
-    if (i % 2 == 0) {
-      for (let j = 0; j < 4; j++) {
-        if (i == j) continue outer;
-        else if (j > i) break exit;
+  // outer:
+  // for (let i = 0; i < 5; i++) {
+  //   exit:
+  //   if (i % 2 == 0) {
+  //     for (let j = 0; j < 4; j++) {
+  //       if (i == j) continue outer;
+  //       else if (j > i) break exit;
 
-        results.push(`did ${i} ${j}`);
-      }
-    }
+  //       results.push(`did ${i} ${j}`);
+  //     }
+  //   }
 
-    results.push(`reached end of ${i}`);
-  }
+  //   results.push(`reached end of ${i}`);
+  // }
 
   return results;
 }

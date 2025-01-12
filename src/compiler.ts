@@ -1816,6 +1816,7 @@ export class Compiler extends DiagnosticEmitter {
 
     // if this is a normal function, make sure that all branches terminate
     } else if (returnType != Type.void && !flow.is(FlowFlags.Terminates)) {
+      console.log("function flow flags", flow.flags)
       this.error(
         DiagnosticCode.A_function_whose_declared_type_is_not_void_must_return_a_value,
         instance.prototype.functionTypeNode.returnType.range
@@ -1823,6 +1824,7 @@ export class Compiler extends DiagnosticEmitter {
       return false; // not recoverable
     }
 
+    if (instance.internalName.includes("tests")) console.log("function flow flags", flow.flags)
     return true;
   }
 
@@ -2333,6 +2335,7 @@ export class Compiler extends DiagnosticEmitter {
 
     outerFlow.inherit(innerFlow);
     this.currentFlow = outerFlow;
+    console.log("block flow flags", innerFlow.flags, outerFlow.flags);
     return innerFlow.isAny(FlowFlags.Breaks | FlowFlags.ConditionallyBreaks)
       ? this.module.block(breakLabel, stmts)
       : this.module.flatten(stmts);
@@ -2525,6 +2528,7 @@ export class Compiler extends DiagnosticEmitter {
     if (outerFlow.is(FlowFlags.Terminates)) {
       expr = module.block(null, [ expr, module.unreachable() ]);
     }
+    if (flow.sourceFunction.internalName.includes("tests")) console.log("do flow flags", flow.flags, outerFlow.flags);
     return expr;
   }
 
@@ -2638,9 +2642,10 @@ export class Compiler extends DiagnosticEmitter {
     let possiblyBreaks = bodyFlow.isAny(FlowFlags.Breaks | FlowFlags.ConditionallyBreaks);
 
     if (possiblyContinues) {
+      if (labelNode) console.log("hi, working")
       bodyStmts[0] = module.block(continueLabel, bodyStmts);
       bodyStmts.length = 1;
-    }
+    } else if (labelNode) console.log("uh oh")
 
     if (condKind == ConditionKind.True) {
       // Body executes at least once

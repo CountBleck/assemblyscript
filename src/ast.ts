@@ -666,6 +666,14 @@ export abstract class Node {
     return new NamespaceDeclaration(name, decorators, flags, members, range);
   }
 
+  static createLabel(
+    statement: Statement,
+    name: IdentifierExpression,
+    range: Range
+  ): Label {
+    return new Label(statement, name, range);
+  }
+
   static createReturnStatement(
     value: Expression | null,
     range: Range

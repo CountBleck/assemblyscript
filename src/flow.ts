@@ -206,7 +206,9 @@ class UserLabels {
     /** The label we break to when encountering a break statement. */
     readonly breakLabel: string,
     /** The label we break to when encountering a continue statement. */
-    readonly continueLabel: string | null
+    readonly continueLabel: string | null,
+    /** The target flow. */
+    readonly flow: Flow
   ) {}
 }
 
@@ -480,7 +482,7 @@ export class Flow {
       this.program.error(DiagnosticCode.Duplicate_label_0, declarationNode.range, name);
     }
 
-    userLabelMap.set(name, new UserLabels(breakLabel, continueLabel));
+    userLabelMap.set(name, new UserLabels(breakLabel, continueLabel, this));
   }
 
   /** Remove a user-declared label name. */

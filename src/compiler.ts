@@ -183,7 +183,8 @@ import {
   isTypeOmitted,
   Source,
   TypeDeclaration,
-  ParameterKind
+  ParameterKind,
+  Label
 } from "./ast";
 
 import {
@@ -2223,6 +2224,10 @@ export class Compiler extends DiagnosticEmitter {
         stmt = this.compileIfStatement(<IfStatement>statement);
         break;
       }
+      case NodeKind.Label: {
+        stmt = this.compileLabeledStatement(<Label>statement);
+        break;
+      }
       case NodeKind.Return: {
         stmt = this.compileReturnStatement(<ReturnStatement>statement);
         break;
@@ -2301,10 +2306,8 @@ export class Compiler extends DiagnosticEmitter {
   }
 
   private compileBlockStatement(
-    statement: BlockStatement
+    statement: BlockStatement,
   ): ExpressionRef {
-    if (statement.label) return this.compileLabeledBlockStatement(statement);
-
     let statements = statement.statements;
     let outerFlow = this.currentFlow;
     let innerFlow = outerFlow.fork();
@@ -2317,13 +2320,13 @@ export class Compiler extends DiagnosticEmitter {
   }
 
   private compileLabeledBlockStatement(
-    statement: BlockStatement
+    statement: BlockStatement,
+    labelNode: IdentifierExpression
   ): ExpressionRef {
     let statements = statement.statements;
     let outerFlow = this.currentFlow;
     let innerFlow = outerFlow.fork();
 
-    let labelNode = assert(statement.label);
     let label = innerFlow.pushControlFlowLabel();
     let breakLabel = `block-break|${label}`;
     innerFlow.addUserLabel(labelNode.text, breakLabel, null, labelNode);
@@ -2365,10 +2368,14 @@ export class Compiler extends DiagnosticEmitter {
     let module = this.module;
     let labelNode = statement.label;
     let flow = this.currentFlow;
+    let targetFlow = flow;
     let breakLabel: string | null = null;
     if (labelNode) {
       const userLabel = flow.getUserLabel(labelNode.text);
-      if (userLabel) breakLabel = userLabel.breakLabel;
+      if (userLabel) {
+        breakLabel = userLabel.breakLabel;
+        targetFlow = userLabel.flow;
+      }
     } else {
       breakLabel = flow.breakLabel;
     }
@@ -2384,6 +2391,10 @@ export class Compiler extends DiagnosticEmitter {
     }
 
     flow.set(FlowFlags.Breaks);
+    while (flow != targetFlow) {
+      flow = assert(flow.parent);
+      flow.set(FlowFlags.Breaks);
+    }
     return module.br(breakLabel);
   }
 
@@ -2393,10 +2404,14 @@ export class Compiler extends DiagnosticEmitter {
     let module = this.module;
     let labelNode = statement.label;
     let flow = this.currentFlow;
+    let targetFlow = flow;
     let continueLabel: string | null = null;
     if (labelNode) {
       const userLabel = flow.getUserLabel(labelNode.text);
-      if (userLabel) continueLabel = userLabel.continueLabel;
+      if (userLabel) {
+        continueLabel = userLabel.continueLabel;
+        targetFlow = flow;
+      }
     } else {
       continueLabel = flow.continueLabel;
     }
@@ -2413,6 +2428,10 @@ export class Compiler extends DiagnosticEmitter {
     }
 
     flow.set(FlowFlags.Continues | FlowFlags.Terminates);
+    while (flow != targetFlow) {
+      flow = assert(flow.parent);
+      flow.set(FlowFlags.Continues | FlowFlags.Terminates);
+    }
     return module.br(continueLabel);
   }
 
@@ -2812,6 +2831,28 @@ export class Compiler extends DiagnosticEmitter {
     flow.popControlFlowLabel(label);
     flow.removeUserLabel(labelNode.text);
     return module.block(breakLabel, [expr]);
+  }
+
+  private compileLabeledStatement(
+    label: Label
+  ): ExpressionRef {
+    // TODO
+    const name = label.name;
+    const statement = label.statement;
+    switch (statement.kind) {
+      case NodeKind.Do:
+      case NodeKind.For:
+      case NodeKind.If:
+        return assert(false);
+      case NodeKind.Block:
+        return this.compileLabeledBlockStatement(<BlockStatement>statement, name);
+
+      case NodeKind.Switch:
+      case NodeKind.Try:
+      case NodeKind.While:
+      default:
+        return assert(false);
+    }
   }
 
   private compileReturnStatement(

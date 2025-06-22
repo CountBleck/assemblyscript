@@ -3018,6 +3018,7 @@ export class Parser extends DiagnosticEmitter {
       this.skipStatement(tn);
     } else {
       tn.discard(state);
+      if (label) statement = Node.createLabel(statement, label, label.range);
     }
     return statement;
   }
